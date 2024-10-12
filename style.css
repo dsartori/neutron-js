@@ -1,0 +1,233 @@
+body {
+    background-color: black;
+}
+
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr); /* 5 equal columns */
+    grid-template-rows: repeat(5, 1fr);    /* 5 equal rows */
+    gap: 0px;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 20px;
+    width: 100%; /* Take full width of parent */
+    max-width: 750px; /* Max grid width */
+    aspect-ratio: 1; /* Ensure the grid maintains a square aspect ratio */
+}
+
+.cell {
+    width: 100%; /* Scale with the grid */
+    height: 0; /* Trick for responsive height */
+    padding-bottom: 100%; /* Keeps cell aspect ratio square */
+    border: 1px solid white;
+    position: relative;
+}
+
+.piece {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.5s ease-in-out;
+}
+
+.highlight {
+    box-shadow: inset 0 0 0 6px rgba(255, 255, 0, 0.8); /* Slightly inside the borders */
+    animation: highlight-fade 1s infinite ease-in-out; /* Animation for opacity cycle */
+}
+
+/* Keyframes for cycling the opacity */
+@keyframes highlight-fade {
+    0% {
+        box-shadow: inset 0 0 0 6px rgba(255, 255, 0, 0.2); /* More transparent */
+    }
+    50% {
+        box-shadow: inset 0 0 0 6px rgba(255, 255, 0, 0.8); /* Less transparent */
+    }
+    100% {
+        box-shadow: inset 0 0 0 6px rgba(255, 255, 0, 0.2); /* More transparent */
+    }
+}
+
+.game-container {
+    width: 100%; /* Full width container */
+    max-width: 750px; /* Match grid's max width */
+    margin: 0 auto;
+    text-align: center;
+}
+/* Ensure the dashboard matches the board width and has a transparent background */
+.dashboard {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%; /* Full width, to match grid */
+    margin-top: 20px;
+    max-width: 750px; /* Match grid's max width */
+    height: 50px; /* Fixed height for the dashboard */
+    background-color: transparent; /* Transparent background */
+    padding: 5px;
+}
+
+/* Styl
+
+/* Turn indicator */
+.turn-indicator {
+    flex: 1;
+    height: 100%;
+    background-color: transparent; /* Transparent to match dashboard */
+    color: #f4f4f4; /* Match button text color */
+    border: 1px solid #585858;
+    text-align: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 0.8em;
+    font-family: 'Arial', sans-serif; 
+}
+.wait-indicator {
+    display: none; /* Initially hidden */
+    width: 60px;
+    height: 100%;
+    background-color: transparent; /* Transparent to match dashboard */
+    color: #f4f4f4; /* Match button text color */
+    border: 1px solid #585858;
+    text-align: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 2em;
+    font-family: 'Arial', sans-serif; 
+    z-index: 10;
+}
+
+.wait-image {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+/* Style for control buttons */
+.control-button {
+    flex: 1; 
+    height: 100%; 
+    background-color: rgba(204, 204, 204, 0.7); /* Semi-transparent button */
+    border: 1px solid #585858;
+    cursor: pointer;
+    border-radius: 5px;
+    font-size: 0.8em;
+    font-family: 'Arial', sans-serif; 
+    transition: background-color 0.2s, transform 0.1s;
+    text-align: center;
+    padding: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #f4f4f4; /* Use the original background color for font */
+}
+.control-button:disabled {
+    background-color: rgba(204, 204, 204, 0.3); /* More transparent when disabled */
+    color: #ccc; /* Lighter text color */
+    cursor: not-allowed; /* Disable pointer events */
+}
+
+.control-button:hover {
+    background-color: rgba(204, 204, 204, 0.9); /* Slightly less transparent on hover */
+}
+
+.control-button:active {
+    background-color: rgba(170, 170, 170, 0.7); /* Darken slightly when active */
+    transform: scale(0.98); /* Scale down on click */
+}
+
+
+.win-label {
+    font-size: 1.5em;
+    font-weight: bold;
+    margin-top: 10px;
+    text-align: center;
+    display: none;
+    background-color: #4e4949;
+}
+
+#winLabel {
+    display: none;
+    font-size: 24px;
+    font-weight: bold;
+    text-align: center;
+    margin-top: 20px;
+}
+/* Help Button */
+.help-button {
+    width: 60px;
+    height: 100%;
+    background-color: transparent; /* Transparent to match dashboard */
+    color: #f4f4f4; /* Match button text color */
+    border: 1px solid #585858;
+    text-align: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 2em;
+    font-family: 'Arial', sans-serif; 
+    z-index: 10;
+}
+
+.help-button:hover {
+    background-color: #ccc;
+}
+
+/* Overlay */
+.help-overlay {
+    display: none; /* Initially hidden */
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent background */
+    z-index: 20;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Modal content */
+.help-content {
+    font-family: 'Arial', sans-serif; 
+    color: white;
+    font-size: 0.9em;
+    opacity: 1;
+    background-color: rgb(37, 36, 36);
+    padding: 20px;
+    border-radius: 10px;
+    text-align: left;
+    max-width: 500px;
+    width: 80%;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    position: relative;
+}
+
+/* Close button */
+.close-help-button {
+    margin-top: 20px;
+    padding: 8px 16px;
+    background-color: #ccc;
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+}
+
+.close-help-button:hover {
+    background-color: #bbb;
+}
+
+
+
+.black-wins {
+    color: rgb(171, 169, 169);
+}
+
+.white-wins {
+    color: rgb(250, 250, 250);
+}
