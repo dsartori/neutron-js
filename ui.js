@@ -38,7 +38,6 @@ function resetGameUI(game) {
     updateTurnIndicator(game);  
     updateDifficultyIndicator(game);
     
-    document.getElementById('winLabel').style.display = 'none';
     document.getElementById('wait-label').style.display='none';
     document.getElementById('help-button').style.display = 'flex';
     document.getElementById('toggleModeButton').disabled = false; 
@@ -157,7 +156,6 @@ function animateMove(fromX, fromY, toX, toY, game) {
 
 
 function handleMove(fromX, fromY, toX, toY, game) {
-    console.log(`HandleMove: Moving piece from (${fromX}, ${fromY}) to (${toX}, ${toY})`);
 
     return animateMove(fromX, fromY, toX, toY, game)
         .then(() => {
@@ -192,6 +190,7 @@ function handleCellClick(x, y, game) {
             game.selectedPiece = null;   
             const winner = checkGameOver(game);
             if (game.finished) {
+                console.log("Game is over, no more moves allowed.");
                 gameOver(winner);
                 return;
             }
@@ -245,19 +244,22 @@ function checkGameOver(game) {
 
 
 function gameOver(winner) {
-    const winLabel = document.getElementById('winLabel');
+    
+    const turnIndicator = document.getElementById('turnIndicator');
+    let turnText = "";
+    
 
-    if (winner === kBlackPiece) {
-        winLabel.textContent = "Black Wins!";
-        winLabel.classList.remove('white-wins');
-        winLabel.classList.add('black-wins');
-    } else if (winner === kWhitePiece) {
-        winLabel.textContent = "White Wins!";
-        winLabel.classList.remove('black-wins');
-        winLabel.classList.add('white-wins');
+    if (winner === kWhitePiece) {
+        turnText = "White Wins!";
+        turnIndicator.classList.add('white-turn');
+        turnIndicator.classList.remove('black-turn');
+    } else {
+        turnText = "Black Wins!";
+        turnIndicator.classList.add('black-turn');
+        turnIndicator.classList.remove('white-turn');
     }
-
-    winLabel.style.display='none';
+    
+    turnIndicator.innerText = turnText;
 
 }
 
@@ -310,7 +312,6 @@ function updateTurnIndicator(game) {
 }
 
 function updateDifficultyIndicator(game) {
-    console.log("Difficulty set to", game.difficulty);
     const difficultyIndicator = document.getElementById('difficultyButton');
     let difficultyText = '';
     switch (game.difficulty) {

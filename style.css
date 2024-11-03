@@ -150,14 +150,14 @@ body {
     display: none;
     background-color: #4e4949;
 }
-
+/*
 #winLabel {
     display: none;
     font-size: 24px;
     font-weight: bold;
     text-align: center;
     margin-top: 20px;
-}
+}*/
 /* Help Button */
 .help-button {
     width: 60px;
