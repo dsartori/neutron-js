@@ -15,8 +15,12 @@ class NeutronGame {
         this.finished = false;
         this.selectedPiece = null;
         this.gameStarted = false;
+        this.aiThinking = false;
+        this.revision = 0;
         this.grid = this.createInitialGrid();
         this.difficulty = 3;
+        this.random = Math.random;
+        this.debug = false;
     }
 
     // Create the initial game grid and set the turn state
@@ -57,6 +61,8 @@ class NeutronGame {
         this.finished = false;
         this.selectedPiece = null;
         this.gameStarted = false;
+        this.aiThinking = false;
+        this.revision += 1;
     }
 
 
@@ -70,6 +76,33 @@ class NeutronGame {
             }
         }
         return pieces;
+    }
+
+    // Plain, serialisable snapshot used to hand the position to the AI worker.
+    getSearchState() {
+        return {
+            grid: this.grid.map(col => col.map(cell => cell.state)),
+            turn: this.turn,
+            turnStage: this.turnStage,
+            difficulty: this.difficulty,
+            debug: this.debug,
+        };
+    }
+
+    // Inverse of getSearchState. Used by the AI worker.
+    static fromSearchState(snapshot) {
+        const game = new NeutronGame(snapshot.grid.length, snapshot.grid[0].length);
+        for (let x = 0; x < snapshot.grid.length; x++) {
+            for (let y = 0; y < snapshot.grid[0].length; y++) {
+                game.grid[x][y].state = snapshot.grid[x][y];
+                game.grid[x][y].highlight = false;
+            }
+        }
+        game.turn = snapshot.turn;
+        game.turnStage = snapshot.turnStage;
+        game.difficulty = snapshot.difficulty;
+        game.debug = !!snapshot.debug;
+        return game;
     }
 
     isValidMove(fromX, fromY, toX, toY) {
@@ -130,7 +163,7 @@ class NeutronGame {
             }
         }
         if (y === 0 || y === this.gridYsize - 1) {
-            return 0;
+            return false;
         }
         return count < 8;
     }
@@ -177,138 +210,59 @@ class NeutronGame {
 
     highlightMovesForX(x, y) {
         this.zeroGridHighlights();
-    
-        let i, hCell, myCell;
-    
-        // Up
-        for (i = y - 1; i >= 0; i--) {
-            myCell = this.grid[x][i];
-            if (myCell.state === kEmpty) {
-                hCell = myCell;
-            } else {
-                break;
+
+        // A sliding piece comes to rest on the farthest empty cell along
+        // each of the eight compass directions, or not at all.
+        const directions = [
+            [0, -1], [0, 1], [-1, 0], [1, 0],
+            [-1, -1], [1, -1], [-1, 1], [1, 1],
+        ];
+
+        for (const [dx, dy] of directions) {
+            let lastEmpty = null;
+            let cx = x + dx;
+            let cy = y + dy;
+            while (cx >= 0 && cx < this.gridXsize && cy >= 0 && cy < this.gridYsize) {
+                if (this.grid[cx][cy].state !== kEmpty) break;
+                lastEmpty = this.grid[cx][cy];
+                cx += dx;
+                cy += dy;
             }
+            if (lastEmpty) lastEmpty.highlight = true;
         }
-        if (hCell) hCell.highlight = true;
-    
-        // Down
-        for (i = y + 1; i < this.gridYsize; i++) {
-            myCell = this.grid[x][i];
-            if (myCell.state === kEmpty) {
-                hCell = myCell;
-            } else {
-                break;
-            }
-        }
-        if (hCell) hCell.highlight = true;
-    
-        // Left
-        for (i = x - 1; i >= 0; i--) {
-            myCell = this.grid[i][y];
-            if (myCell.state === kEmpty) {
-                hCell = myCell;
-            } else {
-                break;
-            }
-        }
-        if (hCell) hCell.highlight = true;
-    
-        // Right
-        for (i = x + 1; i < this.gridXsize; i++) {
-            myCell = this.grid[i][y];
-            if (myCell.state === kEmpty) {
-                hCell = myCell;
-            } else {
-                break;
-            }
-        }
-        if (hCell) hCell.highlight = true;
-    
-        // Up-left diagonal
-        let s = Math.min(x, y);
-        for (i = 1; i <= s; i++) {
-            myCell = this.grid[x - i][y - i];
-            if (myCell.state === kEmpty) {
-                hCell = myCell;
-            } else {
-                break;
-            }
-        }
-        if (hCell) hCell.highlight = true;
-    
-        // Up-right diagonal
-        s = Math.min(this.gridXsize - x - 1, y);
-        for (i = 1; i <= s; i++) {
-            myCell = this.grid[x + i][y - i];
-            if (myCell.state === kEmpty) {
-                hCell = myCell;
-            } else {
-                break;
-            }
-        }
-        if (hCell) hCell.highlight = true;
-    
-        // Down-right diagonal
-        s = Math.min(this.gridXsize - x - 1, this.gridYsize - y - 1);
-        for (i = 1; i <= s; i++) {
-            myCell = this.grid[x + i][y + i];
-            if (myCell.state === kEmpty) {
-                hCell = myCell;
-            } else {
-                break;
-            }
-        }
-        if (hCell) hCell.highlight = true;
-    
-        // Down-left diagonal
-        s = Math.min(x, this.gridYsize - y - 1);
-        for (i = 1; i <= s; i++) {
-            myCell = this.grid[x - i][y + i];
-            if (myCell.state === kEmpty) {
-                hCell = myCell;
-            } else {
-                break;
-            }
-        }
-        if (hCell) hCell.highlight = true;
     }
     alphaBeta(state, turn, depth, alpha, beta) {
         const validMoves = this.getMovesForGrid(state, turn);
-    
+
         // Game over or max depth
-        if (depth === 0 || validMoves.length === 0 || state.finished) {
-            return state.evaluateStateTurn(turn);  
+        if (depth === 0 || validMoves.length === 0) {
+            return state.evaluateStateTurn(turn);
         }
-    
-        let bestScore = (turn === kBlackPiece) ? -1001 : 1001; 
-        let nTurn = (turn === kBlackPiece) ? kWhitePiece : kBlackPiece; 
-    
+
+        const maximizing = (turn === kBlackPiece);
+        const nTurn = maximizing ? kWhitePiece : kBlackPiece;
+        let bestScore = maximizing ? -1001 : 1001;
+
         for (let i = 0; i < validMoves.length; i++) {
             const newState = this.applyMoves(state, validMoves[i]);
-    
-            // Evaluate the new state after the move
-            // * in the copy
-            // * Evaluate the state for the next turn
-            let score = newState.evaluateStateTurn(nTurn);  
-    
-            if (!newState.finished) {  
-                // * If the game isn't over, continue recursion
-                score = this.alphaBeta(newState, nTurn, depth - 1, alpha, beta);
-            }
-    
-            if (turn === kBlackPiece) {
+            const terminal = newState.getTerminalResult(nTurn);
+            const score = terminal
+                ? terminal.score
+                : this.alphaBeta(newState, nTurn, depth - 1, alpha, beta);
+
+            if (maximizing) {
                 bestScore = Math.max(bestScore, score);
                 alpha = Math.max(alpha, score);
             } else {
                 bestScore = Math.min(bestScore, score);
                 beta = Math.min(beta, score);
             }
-    
+
             if (alpha >= beta) {
                 break;
             }
         }
-    
+
         return bestScore;
     }
 
@@ -319,48 +273,114 @@ class NeutronGame {
     }
         
     evaluateMoves(state, turn, depth) {
+        const startedAt = this.debug ? Date.now() : 0;
+        const scoredMoves = this.debug ? [] : null;
         const validMoves = this.getMovesForGrid(state, turn);
-    
-        // Game over or max depth
-        if (depth === 0 || validMoves.length === 0 || state.finished) {
-            return state.evaluateStateTurn(turn);  
+
+        // Always returns an array. Empty when there is nothing to play.
+        if (depth === 0 || validMoves.length === 0) {
+            return [];
         }
-    
+
+        const maximizing = (turn === kBlackPiece);
+        const nTurn = maximizing ? kWhitePiece : kBlackPiece;
+        let bestRank = maximizing ? -1001 : 1001;
         let bestMoves = [];
-        let bestRank = (turn === kBlackPiece) ? -1001 : 1001;
-        let nTurn = (turn === kBlackPiece) ? kWhitePiece : kBlackPiece;
-    
+        const immediateWins = [];
+
         for (let i = 0; i < validMoves.length; i++) {
             const newState = this.applyMoves(state, validMoves[i]);
-    
-            // Check if the game ends after the move
-            let score = newState.evaluateStateTurn(nTurn);  
-    
-            if (!newState.finished) {  // Only continue if game is not finished
-                score = this.alphaBeta(newState, nTurn, depth - 1, -1001, 1001);
+            const terminal = newState.getTerminalResult(nTurn);
+            // Full window per candidate. Sharing alpha across siblings lets a
+            // pruned child return an artifact bound (e.g. 1000 when it was cut
+            // early), which then ties with genuine wins and corrupts the
+            // best-move set. Each root child must be exact.
+            const score = terminal
+                ? terminal.score
+                : this.alphaBeta(newState, nTurn, depth - 1, -1001, 1001);
+            if (scoredMoves) {
+                scoredMoves.push({ move: validMoves[i], score, terminal: !!terminal });
             }
-    
-            // Track the best move based on score
-            if (turn === kBlackPiece && score > bestRank) {
-                bestRank = score;
-                bestMoves = [validMoves[i]];
-            } else if (turn === kWhitePiece && score < bestRank) {
+
+            // A move that ends the game on this ply beats any searched line.
+            if (terminal && ((maximizing && terminal.score > 0) || (!maximizing && terminal.score < 0))) {
+                immediateWins.push(validMoves[i]);
+            }
+
+            if ((maximizing && score > bestRank) || (!maximizing && score < bestRank)) {
                 bestRank = score;
                 bestMoves = [validMoves[i]];
             } else if (score === bestRank) {
                 bestMoves.push(validMoves[i]);
             }
+
         }
-    
-        return bestMoves;
+
+        // Among tied best moves, prefer not to end the game or hand the side
+        // to move a one-ply edge slide. hasImmediateWin asks only for a slide,
+        // so a terminal position (neutron already on an edge row) can look
+        // quiet to it. Exclude terminal candidates first; failing that, at
+        // least never self-finalize when any tied non-terminal exists.
+        if (immediateWins.length === 0 && bestMoves.length > 1) {
+            const scored = bestMoves.map((candidate) => {
+                const ns = this.applyMoves(state, candidate);
+                return { candidate, terminal: ns.getTerminalResult(nTurn), opponentWin: ns.hasImmediateWin() };
+            });
+            let narrowed = scored.filter((entry) => entry.terminal === null && !entry.opponentWin)
+                .map((entry) => entry.candidate);
+            let stage = 'one-ply-proof';
+            if (narrowed.length === 0) {
+                narrowed = scored.filter((entry) => entry.terminal === null)
+                    .map((entry) => entry.candidate);
+                stage = 'never-self-final';
+            }
+            if (narrowed.length > 0 && this.debug && narrowed.length !== bestMoves.length) {
+                console.log('[neutron] tie-break: ' + bestMoves.length + ' -> ' + narrowed.length + ' (' + stage + ')');
+            }
+            if (narrowed.length > 0) {
+                bestMoves = narrowed;
+            }
+        }
+
+        if (this.debug) {
+            const ranked = scoredMoves.slice().sort((a, b) => (
+                maximizing ? b.score - a.score : a.score - b.score
+            ));
+            console.log('[neutron] search depth=' + depth +
+                ' moves=' + validMoves.length +
+                ' immediateWins=' + immediateWins.length +
+                ' bestSet=' + (immediateWins.length || bestMoves.length) +
+                ' t=' + (Date.now() - startedAt) + 'ms');
+            ranked.slice(0, 6).forEach((entry, index) => {
+                console.log('[neutron]   cand[' + index + '] score=' + entry.score +
+                    (entry.terminal ? ' terminal' : '') +
+                    ' ' + this.formatMove(entry.move));
+            });
+        }
+
+        return immediateWins.length > 0 ? immediateWins : bestMoves;
+    }
+
+    // Debug helper: one-line summary of a move pair.
+    formatMove(move) {
+        const [nMove, pieceMove] = move;
+        return 'neutron(' + nMove[0][0] + ',' + nMove[0][1] + ')->(' + nMove[1][0] + ',' + nMove[1][1] +
+            ') piece(' + pieceMove[0][0] + ',' + pieceMove[0][1] + ')->(' + pieceMove[1][0] + ',' + pieceMove[1][1] + ')';
     }
     
     // Apply best-move evaluation
     getBestMoveForState(state, turn) {
         const possibleMoves = this.evaluateMoves(state, turn, this.difficulty);
         if (possibleMoves.length > 0) {
-            const randomIndex = Math.floor(Math.random() * possibleMoves.length);
-            return possibleMoves[randomIndex];
+            const randomIndex = Math.floor(this.random() * possibleMoves.length);
+            const chosen = possibleMoves[randomIndex];
+            if (this.debug) {
+                console.log('[neutron] chose ' + this.formatMove(chosen));
+            }
+            return chosen;
+        }
+        if (this.debug) {
+            console.log('[neutron] no legal move');
         }
         return null;
     }
@@ -381,48 +401,78 @@ class NeutronGame {
     }
     
 
+    // Terminal result for the side to move, or null while the game runs.
+    // Absolute score convention: Black positive, White negative.
+    getTerminalResult(turn) {
+        const neutron = this.getPiecesForColour(kNeutralPiece)[0];
+        if (!neutron) {
+            return null;
+        }
+        const y = neutron[1];
+        if (y === 0) {
+            return { score: 1000, winner: kBlackPiece };
+        }
+        if (y === this.gridYsize - 1) {
+            return { score: -1000, winner: kWhitePiece };
+        }
+        if (!this.neutronHasMoves()) {
+            return {
+                score: turn === kBlackPiece ? -1000 : 1000,
+                winner: turn === kBlackPiece ? kWhitePiece : kBlackPiece,
+            };
+        }
+        return null;
+    }
+
+    // Sole place the real game's finished flag is set. Search nodes use
+    // getTerminalResult instead and stay mutation-free.
+    getWinnerStatus() {
+        const neutron = this.getPiecesForColour(kNeutralPiece)[0];
+        if (!neutron) {
+            return { finished: false, winner: null };
+        }
+        const terminal = this.getTerminalResult(this.turn);
+        if (terminal) {
+            this.finished = true;
+            return { finished: true, winner: terminal.winner };
+        }
+        return { finished: false, winner: null };
+    }
+
+    // True when the neutron can slide onto an edge row in one move.
+    hasImmediateWin() {
+        const neutron = this.getPiecesForColour(kNeutralPiece)[0];
+        if (!neutron) {
+            return false;
+        }
+        this.highlightMovesForX(neutron[0], neutron[1]);
+        const edgeRow = this.gridYsize - 1;
+        const wins = this.getHighlightedCells()
+            .some(([, cy]) => cy === 0 || cy === edgeRow);
+        this.zeroGridHighlights();
+        return wins;
+    }
+
     evaluateStateTurn(turn) {
         let score = 0;
-    
-        let neutronPos = this.getPiecesForColour(kNeutralPiece)[0];  
+
+        const neutronPos = this.getPiecesForColour(kNeutralPiece)[0];
         const black = this.getPiecesForColour(kBlackPiece);
         const white = this.getPiecesForColour(kWhitePiece);
-    
-        const x = neutronPos[0];  
-        const y = neutronPos[1];  
-    
+
+        const x = neutronPos[0];
+        const y = neutronPos[1];
+
         let tmpCell;
 
-        const multiplier = (turn === kWhitePiece) ? 1 : 1;
-    
-        // Endgame conditions
-        if (y === this.gridYsize - 1) {
-            score = -1000; // white win
-            this.finished = true;
-
-            return score;
-        }
-        if (y === 0) {
-            score = 1000 //  black win
-            this.finished = true;
-            return score;
-        }
-    
-        // No valid moves
-        if (!this.neutronHasMoves()) {
-            score = (turn === kBlackPiece) ? -1000 : 1000;
-            this.finished = true;
-            return score;
+        const terminal = this.getTerminalResult(turn);
+        if (terminal) {
+            return terminal.score;
         }
 
-        const opponent = turn === kWhitePiece ? kBlackPiece : kWhitePiece;
-        const opponentMoves = this.getMovesForGrid(this, opponent);
-        
-        for (let oppMove of opponentMoves) {
-            if (this.isWinningMove(this, oppMove)) {
-                score -= 500; // Heavy penalty if opponent has a winning move. Only relevant at max depth
-                return score;
-            }
+        // The side to move wins if the neutron can slide onto an edge row now.
+        if (this.hasImmediateWin()) {
+            return turn === kBlackPiece ? 1000 : -1000;
         }
         // Evaluate piece positions 
         const evaluatePieces = (pieces, isWhite) => {
@@ -450,6 +500,9 @@ class NeutronGame {
     
         evaluatePieces(white, true);   
         evaluatePieces(black, false);  
+
+        // The neutron is the prize. Closer to Black's edge favours Black.
+        score += (Math.floor(this.gridYsize / 2) - y) * 60;
     
         // Check vertical paths
         const checkVerticalPath = (startY, endY, isWhite) => {
@@ -523,28 +576,18 @@ class NeutronGame {
     }
         
     cloneGrid(state) {
-        const newState = new NeutronGame(this.gridXsize, this.gridYsize);
-        for (let x = 0; x < this.gridXsize; x++) {
-            for (let y = 0; y < this.gridYsize; y++) {
+        const newState = new NeutronGame(state.gridXsize, state.gridYsize);
+        newState.difficulty = state.difficulty;
+        newState.aiEnabled = state.aiEnabled;
+        for (let x = 0; x < state.gridXsize; x++) {
+            for (let y = 0; y < state.gridYsize; y++) {
                 newState.grid[x][y].state = state.grid[x][y].state;
+                newState.grid[x][y].highlight = false;
             }
         }
         return newState;
     }
     
-    getHighlightedPiece() {
-        for (let x = 0; x < this.gridXsize; x++) {
-            for (let y = 0; y < this.gridYsize; y++) {
-                const cell = this.grid[x][y];
-                if (cell.state > 0 && cell.highlight) {
-                    return [x, y];
-                }
-            }
-        }
-        return null;
-    }
-    
-
     getHighlightedCells() {
         const highlightedCells = [];
         for (let x = 0; x < this.gridXsize; x++) {
@@ -557,15 +600,6 @@ class NeutronGame {
         return highlightedCells;
     }
     
-    zeroGridState() {
-        for (let x = 0; x < this.gridXsize; x++) {
-            for (let y = 0; y < this.gridYsize; y++) {
-                this.grid[x][y].state = kEmpty; 
-            }
-        }
-    }
-    
-
     zeroGridHighlights() {
         for (let x = 0; x < this.gridXsize; x++) {
             for (let y = 0; y < this.gridYsize; y++) {
@@ -574,23 +608,8 @@ class NeutronGame {
         }
     }
 
-    printMoves(moves) {
-        let text = ''
-        text+=('--- Moves Array ---\n');
-        moves.forEach((movePair, index) => {
-            const [neutronMove, pieceMove] = movePair;
-            const [neutronStart, neutronEnd] = neutronMove;
-            const [pieceStart, pieceEnd] = pieceMove;
-            text+=(`Move ${index + 1}:\n`);
-            text+=(`  Neutron [${neutronStart[0]}, ${neutronStart[1]}] -> [${neutronEnd[0]}, ${neutronEnd[1]}] - `);
-            text+=(`  Piece [${pieceStart[0]}, ${pieceStart[1]}] -> [${pieceEnd[0]}, ${pieceEnd[1]}]\n\n`);
-        });
-        text+=('-------------------');
-        return text;
-    }
-
      printBoardState(grid) {
-        let boardString = '\n';
+        let boardString = '';
         for (let y = 0; y < grid[0].length; y++) {
             let row = '';
             for (let x = 0; x < grid.length; x++) {
@@ -607,16 +626,7 @@ class NeutronGame {
             }
             boardString += row + '\n';
         }
-    }
-
-    isWinningMove(state, move) {
-        const [neutronMove, pieceMove] = move;
-        const neutronEnd = neutronMove[1];
-        // Check if neutron reaches the opponent's winning row
-        if (neutronEnd[1] === 0 || neutronEnd[1] === state.gridYsize - 1) {
-            return true;
-        }
-        return false;
+        return boardString;
     }
 
 }

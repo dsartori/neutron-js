@@ -3,31 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Neutron, the strategy board game, in the browser.">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'self'">
     <title>Neutron Game</title>
+    <link rel="icon" href="favicon.ico">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="game-container">
-        <div id="gameGrid" class="grid"></div>
+        <div id="gameGrid" class="grid" role="grid" aria-label="Neutron board"></div>
         <div class="dashboard">
-            <div id="turnIndicator" class="turn-indicator"></div>
-            <button id="resetButton" class="control-button">Reset</button>
-            <button id="toggleModeButton" class="control-button">Enable AI</button>
-            <button id="difficultyButton" class="control-button" disabled>Difficulty</button>
-            <button id="help-button" class="help-button">?</button>
-            <button id="wait-label" class="wait-indicator"><img class="wait-image" src="img/wait.svg"></button>
+            <div id="turnIndicator" class="turn-indicator" role="status" aria-live="polite"></div>
+            <button id="resetButton" type="button" class="control-button">Reset</button>
+            <button id="toggleModeButton" type="button" class="control-button">Enable AI</button>
+            <button id="difficultyButton" type="button" class="control-button" disabled>Difficulty</button>
+            <button id="help-button" type="button" class="help-button" aria-label="Show rules">?</button>
+            <div id="wait-label" class="wait-indicator" role="status" aria-label="AI is thinking"><img class="wait-image" src="img/wait.svg" alt=""></div>
         </div>
-        
-        <div id="help-overlay" class="help-overlay">
+
+        <div id="help-overlay" class="help-overlay" role="dialog" aria-modal="true" aria-labelledby="help-title">
             <div class="help-content">
-                <h2>Neutron - Rules</h2>
+                <h2 id="help-title">Neutron - Rules</h2>
                 <p>
                     Each player controls the pieces of their colour, and the neutron.<br>
                     Pieces move in straight lines until they reach an obstacle.<br>
                     On turn 1, White moves a piece. After that, move the neutron, then a piece.<br>
                     Move the neutron to your home row or block the neutron's movement to win.
                 </p>
-                <button id="close-help-button" class="close-help-button">Close</button>
+                <button id="close-help-button" type="button" class="close-help-button">Close</button>
             </div>
         </div>
     </div>

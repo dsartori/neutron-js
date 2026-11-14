@@ -4,16 +4,21 @@ import { kWhitePiece, kBlackPiece, kNeutralPiece, kEmpty, kWhite1, kWhite2, kBla
 document.addEventListener('DOMContentLoaded', () => {
     // UI handlers. Cell clicks are handled in grid setup.
     document.getElementById('resetButton').addEventListener('click', () => {
-            game.initializeGameState();
-            resetGameUI(game);
-        });
-
-    document.getElementById('help-button').addEventListener('click', () => {
-        document.getElementById('help-overlay').style.display = 'flex';
+        resetGameUI(game);
     });
-    
-    document.getElementById('close-help-button').addEventListener('click', () => {
-        document.getElementById('help-overlay').style.display = 'none';
+
+    document.getElementById('help-button').addEventListener('click', openHelpOverlay);
+    document.getElementById('close-help-button').addEventListener('click', closeHelpOverlay);
+    document.getElementById('help-overlay').addEventListener('click', (event) => {
+        // Click on the backdrop, not the panel, dismisses the overlay.
+        if (event.target === document.getElementById('help-overlay')) {
+            closeHelpOverlay();
+        }
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeHelpOverlay();
+        }
     });
 
     document.getElementById('difficultyButton').addEventListener('click', () => {
@@ -22,25 +27,53 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('toggleModeButton').addEventListener('click', () => {
-            game.aiEnabled = !game.aiEnabled;
-            document.getElementById('toggleModeButton').textContent = game.aiEnabled ? "Disable AI" : "Enable AI";
-            document.getElementById('difficultyButton').disabled = !game.aiEnabled;
+        game.aiEnabled = !game.aiEnabled;
+        syncToggleButtons(game);
     });
+
+    // Render the initial grid. Debug logging: ?debug=1 in the URL, or
+    // localStorage.setItem('neutronDebug', '1') then reload.
+    const debug = new URLSearchParams(window.location.search).get('debug') === '1'
+        || window.localStorage.getItem('neutronDebug') === '1';
     const game = new NeutronGame(5, 5);
-    // Render the initial grid
+    game.debug = debug;
+    if (debug) {
+        console.log('[neutron] debug logging enabled');
+    }
     resetGameUI(game);
 });
 
 function resetGameUI(game) {
     game.initializeGameState();
     const gameGridElement = document.getElementById('gameGrid');
-    setupGridUI(gameGridElement, game); 
-    updateTurnIndicator(game);  
+    setupGridUI(gameGridElement, game);
+    updateTurnIndicator(game);
     updateDifficultyIndicator(game);
-    
-    document.getElementById('wait-label').style.display='none';
+    syncToggleButtons(game);
+
+    setWaitVisible(false);
     document.getElementById('help-button').style.display = 'flex';
-    document.getElementById('toggleModeButton').disabled = false; 
+}
+
+// Single source of truth for the AI toggle and difficulty button states.
+function syncToggleButtons(game) {
+    const toggle = document.getElementById('toggleModeButton');
+    toggle.disabled = false;
+    toggle.textContent = game.aiEnabled ? 'Disable AI' : 'Enable AI';
+    document.getElementById('difficultyButton').disabled = !game.aiEnabled;
+}
+
+function setWaitVisible(visible) {
+    document.getElementById('wait-label').style.display = visible ? 'flex' : 'none';
+    document.getElementById('help-button').style.display = visible ? 'none' : 'flex';
+}
+
+function openHelpOverlay() {
+    document.getElementById('help-overlay').style.display = 'flex';
+}
+
+function closeHelpOverlay() {
+    document.getElementById('help-overlay').style.display = 'none';
 }
 
 function setupGridUI(gameGridElement, game) {
@@ -51,8 +84,17 @@ function setupGridUI(gameGridElement, game) {
             cellDiv.classList.add('cell');
             cellDiv.dataset.x = x;
             cellDiv.dataset.y = y;
+            cellDiv.setAttribute('role', 'button');
+            cellDiv.tabIndex = 0;
+            cellDiv.setAttribute('aria-label', cellLabel(x, y, game.grid[x][y].state));
             cellDiv.addEventListener('click', () => {
                 handleCellClick(x, y, game);
+            });
+            cellDiv.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleCellClick(x, y, game);
+                }
             });
             gameGridElement.appendChild(cellDiv);
 
@@ -60,194 +102,281 @@ function setupGridUI(gameGridElement, game) {
             if (cellState !== kEmpty) {
                 const pieceImg = document.createElement('img');
                 pieceImg.src = getPieceImage(cellState);
+                pieceImg.alt = pieceName(cellState);
                 pieceImg.classList.add('piece');
                 cellDiv.appendChild(pieceImg);
             }
         }
     }
 }
-async function handleAITurn(game) {
-    if (game.finished) {
-        console.log("Game is over, no more moves allowed.");
-        return; 
-    }
 
-    console.log("AI is thinking...");
-    const before = new Date().getTime();
-    const bestMove = game.getBestMoveForState(game, kBlackPiece);
+function cellLabel(x, y, state) {
+    return `${pieceName(state)} at column ${x + 1}, row ${y + 1}`;
+}
+
+function pieceName(state) {
+    switch (state) {
+        case kBlackPiece:
+            return 'Black piece';
+        case kWhitePiece:
+            return 'White piece';
+        case kNeutralPiece:
+            return 'Neutron';
+        default:
+            return 'Empty cell';
+    }
+}
+
+// Applies the move to the engine synchronously, then animates the picture.
+// Engine state and the board are never more than one move apart.
+// Applies the AI's move in two stages (neutron, then piece) and updates
+// the board. Bails out silently if the board was reset mid-move.
+async function applyBestMove(game, bestMove, revision, before) {
     const after = new Date().getTime();
+    console.log('AI took', after - before, 'ms to make a move.');
 
-
-    console.log("AI took", after - before, "ms to make a move.");
-    console.log("Best neutron move found by AI:", bestMove[0]);
-    console.log("Best piece move found by AI:", bestMove[1]);
-
-    if (bestMove.length > 0) {
-        await animateMove(bestMove[0][0][0], bestMove[0][0][1], bestMove[0][1][0], bestMove[0][1][1], game);
-        game.switchTurn();  
-
-        // Ensure a slight delay between the moves to prevent overlap
-        await new Promise((resolve) => setTimeout(resolve, 100));  
-
-        await animateMove(bestMove[1][0][0], bestMove[1][0][1], bestMove[1][1][0], bestMove[1][1][1], game);
-        game.switchTurn();  // Switch to the next player's turn after the piece move
-        updateTurnIndicator(game);    
-        document.getElementById('wait-label').style.display = 'none';    
-        document.getElementById('help-button').style.display = 'flex';
-    } else {
-        console.log("No valid moves for AI.");
-    }
-
-    const winner = checkGameOver(game);
-    if (game.finished) {
-        gameOver(winner);
+    if (game.revision !== revision) {
+        game.aiThinking = false;
         return;
     }
-}
 
-
-
-
-function animateMove(fromX, fromY, toX, toY, game) {
-    const cellElement = document.querySelector(`.cell[data-x="${fromX}"][data-y="${fromY}"]`);
-
-    if (cellElement) {
-        const pieceElement = cellElement.querySelector('.piece');
-
-        if (pieceElement) {
-            const cellSize = cellElement.getBoundingClientRect().width; 
-
-            const deltaX = (toX - fromX) * cellSize;
-            const deltaY = (toY - fromY) * cellSize;
-
-            // animate in a Promise to be resolved when the animation ends
-            return new Promise((resolve) => {
-                pieceElement.style.transition = 'transform 0.5s ease';
-                pieceElement.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-
-                pieceElement.addEventListener('transitionend', function handleTransition() {
-                    pieceElement.removeEventListener('transitionend', handleTransition);
-
-                    // Now move the piece in game logic
-                    game.movePiece(fromX, fromY, toX, toY);  // Update game state after animation
-
-                    const targetCellElement = document.querySelector(`.cell[data-x="${toX}"][data-y="${toY}"]`);
-                    if (targetCellElement) {
-                        targetCellElement.appendChild(pieceElement);
-                    }
-
-                    pieceElement.style.transition = '';  
-                    pieceElement.style.transform = ''; 
-                    clearHighlights();
-
-                    resolve();  
-                }, { once: true });
-            });
-        } else {
-            console.error(`No piece found in the cell at (${fromX}, ${fromY}) to animate.`);
-        }
-    } else {
-        console.error(`No cell found at (${fromX}, ${fromY}) to animate.`);
+    if (!bestMove) {
+        console.log('AI has no move.');
+        game.aiThinking = false;
+        setWaitVisible(false);
+        finishIfGameOver(game);
+        return;
     }
 
-    return Promise.resolve();  
+    const [neutronMove, pieceMove] = bestMove;
+    if (game.debug) {
+        console.log('[neutron] ai applies neutron move');
+    }
+    game.movePiece(neutronMove[0][0], neutronMove[0][1], neutronMove[1][0], neutronMove[1][1], true);
+    game.switchTurn();
+    if (game.revision !== revision) {
+        game.aiThinking = false;
+        return;
+    }
+    await animateMove(neutronMove[0][0], neutronMove[0][1], neutronMove[1][0], neutronMove[1][1]);
+
+    if (game.revision !== revision) {
+        game.aiThinking = false;
+        return;
+    }
+    // Short pause so the neutron animation reads before the piece animation.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    if (game.debug) {
+        console.log('[neutron] ai applies piece move');
+    }
+    game.movePiece(pieceMove[0][0], pieceMove[0][1], pieceMove[1][0], pieceMove[1][1], true);
+    game.switchTurn();
+    if (game.debug) {
+        const terminal = game.getTerminalResult(game.turn);
+        if (terminal) {
+            console.log('[neutron] game decided on this move');
+        } else if (game.hasImmediateWin()) {
+            console.log('[neutron] WARNING: side to move can slide the neutron onto an edge row');
+        } else {
+            console.log('[neutron] side to move cannot slide the neutron onto an edge row');
+        }
+    }
+    if (game.revision !== revision) {
+        game.aiThinking = false;
+        return;
+    }
+    await animateMove(pieceMove[0][0], pieceMove[0][1], pieceMove[1][0], pieceMove[1][1]);
+
+    updateTurnIndicator(game);
+    game.aiThinking = false;
+    setWaitVisible(false);
+    finishIfGameOver(game);
 }
 
+// The search runs in a Web Worker so the board stays responsive at depth 5.
+// Falls back to a synchronous search when workers are unavailable.
+async function handleAITurn(game) {
+    if (game.finished || game.aiThinking) {
+        return;
+    }
 
+    game.aiThinking = true;
+    setWaitVisible(true);
+    const revision = game.revision;
+    const before = new Date().getTime();
+    const snapshot = game.getSearchState();
+    if (game.debug) {
+        console.log('[neutron] ai search rev=' + revision + ' depth=' + game.difficulty);
+    }
 
-function handleMove(fromX, fromY, toX, toY, game) {
+    if (typeof Worker === 'undefined') {
+        if (game.debug) {
+            console.log('[neutron] ai path=sync (no Web Worker)');
+        }
+        await applyBestMove(game, game.getBestMoveForState(game, kBlackPiece), revision, before);
+        return;
+    }
 
-    return animateMove(fromX, fromY, toX, toY, game)
-        .then(() => {
-            if (game.turn === kBlackPiece) {
-                document.getElementById('wait-label').style.display='flex';
-                document.getElementById('help-button').style.display = 'none';
+    if (game.debug) {
+        console.log('[neutron] ai path=worker');
+    }
+    let worker;
+    try {
+        worker = new Worker('ai-worker.js', { type: 'module' });
+    } catch (error) {
+        console.warn('Web Worker unavailable; searching synchronously.', error);
+        await applyBestMove(game, game.getBestMoveForState(game, kBlackPiece), revision, before);
+        return;
+    }
+
+    worker.onmessage = (event) => {
+        worker.terminate();
+        applyBestMove(game, event.data, revision, before)
+            .catch((error) => {
+                console.error('Failed to apply the AI move.', error);
+                game.aiThinking = false;
+                setWaitVisible(false);
+            });
+    };
+    worker.onerror = (event) => {
+        console.warn('AI worker failed; searching synchronously.', event.message);
+        worker.terminate();
+        applyBestMove(game, game.getBestMoveForState(game, kBlackPiece), revision, before)
+            .catch((error) => {
+                console.error('Failed to apply the AI move.', error);
+                game.aiThinking = false;
+                setWaitVisible(false);
+            });
+    };
+    worker.postMessage(snapshot);
+}
+
+function finishIfGameOver(game) {
+    const status = game.getWinnerStatus();
+    if (status.finished) {
+        if (game.debug) {
+            console.log('[neutron] game over winner=' + (status.winner === kWhitePiece ? 'white' : 'black'));
+        }
+        gameOver(status.winner);
+        return true;
+    }
+    return false;
+}
+
+// FLIP animation: the image moves into its destination cell first, then slides
+// in from the origin cell. The DOM always agrees with the engine about which
+// cell holds a piece, so lookups never fail mid-animation.
+function animateMove(fromX, fromY, toX, toY) {
+    const cellElement = document.querySelector(`.cell[data-x="${fromX}"][data-y="${fromY}"]`);
+
+    if (!cellElement) {
+        console.error(`No cell found at (${fromX}, ${fromY}) to animate.`);
+        return Promise.resolve();
+    }
+    const pieceElement = cellElement.querySelector('.piece');
+    if (!pieceElement) {
+        console.error(`No piece found in the cell at (${fromX}, ${fromY}) to animate.`);
+        return Promise.resolve();
+    }
+    const targetCellElement = document.querySelector(`.cell[data-x="${toX}"][data-y="${toY}"]`);
+    if (!targetCellElement) {
+        console.error(`No cell found at (${toX}, ${toY}) to animate into.`);
+        return Promise.resolve();
+    }
+
+    const cellSize = cellElement.getBoundingClientRect().width;
+    const deltaX = (toX - fromX) * cellSize;
+    const deltaY = (toY - fromY) * cellSize;
+
+    // Move the image to its destination cell, then slide it in from the origin.
+    targetCellElement.appendChild(pieceElement);
+    pieceElement.style.transition = '';
+    pieceElement.style.transform = `translate(${-deltaX}px, ${-deltaY}px)`;
+    // Force layout so the inverted position is registered before the transition starts.
+    pieceElement.getBoundingClientRect();
+
+    return new Promise((resolve) => {
+        let done = false;
+        const finish = () => {
+            if (done) {
+                return;
             }
-            return new Promise((resolve) => setTimeout(resolve, 300));  
-        })
-        .then(() => {
-            if (game.turn === kBlackPiece && game.aiEnabled) {
-                
-                handleAITurn(game);  
-            }
-        })
-        .catch((error) => {
-            console.error("Error in handleMove:", error);
-        });
+            done = true;
+            pieceElement.style.transition = '';
+            pieceElement.style.transform = '';
+            clearHighlights();
+            resolve();
+        };
+
+        pieceElement.style.transition = 'transform 0.5s ease';
+        pieceElement.style.transform = 'translate(0, 0)';
+        pieceElement.addEventListener('transitionend', finish, { once: true });
+        window.setTimeout(finish, 700);
+    });
 }
 
 function handleCellClick(x, y, game) {
-    if (game.finished) {
-        console.log("Game is over, no more moves allowed.");
-        return;  
+    if (game.finished || game.aiThinking) {
+        return;
     }
+    // Do not let the human move the AI's pieces.
+    if (game.aiEnabled && game.turn === kBlackPiece) {
+        return;
+    }
+
     const cellState = game.grid[x][y].state;
     if (game.selectedPiece !== null) {
         if (game.isValidMove(game.selectedPiece.x, game.selectedPiece.y, x, y)) {
-            handleMove( game.selectedPiece.x, game.selectedPiece.y, x, y, game);
+            const fromX = game.selectedPiece.x;
+            const fromY = game.selectedPiece.y;
+            if (game.debug) {
+                console.log('[neutron] human move (' + fromX + ',' + fromY + ')->(' + x + ',' + y + ') stage=' + game.turnStage);
+            }
+            game.movePiece(fromX, fromY, x, y);
+            animateMove(fromX, fromY, x, y);
             game.switchTurn();
             updateTurnIndicator(game);
-            game.selectedPiece = null;   
-            const winner = checkGameOver(game);
-            if (game.finished) {
-                console.log("Game is over, no more moves allowed.");
-                gameOver(winner);
-                return;
-            }
+            game.selectedPiece = null;
 
-            // When the first move has been made, disable the AI toggle button
             if (!game.gameStarted) {
                 game.gameStarted = true;
-                document.getElementById('toggleModeButton').disabled = true; 
+                document.getElementById('toggleModeButton').disabled = true;
                 document.getElementById('difficultyButton').disabled = true;
             }
 
+            if (finishIfGameOver(game)) {
+                return;
+            }
 
+            if (game.aiEnabled && game.turn === kBlackPiece) {
+                // Let the piece animation play before the AI starts. Re-check at
+                // fire time so a reset during the delay does not trigger an
+                // out-of-turn move on the fresh board.
+                window.setTimeout(() => {
+                    if (game.aiEnabled && !game.finished && !game.aiThinking && game.turn === kBlackPiece) {
+                        handleAITurn(game);
+                    }
+                }, 300);
+            }
         } else {
-            // Invalid move, reset 
+            // Invalid move, deselect and re-render
             game.selectedPiece = null;
-            setupGridUI(document.getElementById('gameGrid'), game);  
+            setupGridUI(document.getElementById('gameGrid'), game);
         }
     } else {
         if ((cellState === game.turn && (game.turnStage === kWhite2 || game.turnStage === kBlack2))
          || (cellState === kNeutralPiece && (game.turnStage === kWhite1 || game.turnStage === kBlack1))) {
             game.selectedPiece = { x, y };
             game.highlightMovesForX(x, y);  // highlight in game object
-            highlightValidMoves(game); // highlight in UI
+            highlightValidMoves(game);      // highlight in UI
         }
     }
 }
 
-function checkGameOver(game) {
-    const neutronPos = game.getPiecesForColour(kNeutralPiece)[0];
-    if (!neutronPos) {
-        console.error('Neutron not found on the board');
-        return null;
-    }
-    const neutronY = neutronPos[1];
-
-    if (neutronY === 0) {
-        game.finished = true;
-        return kBlackPiece;  // Black wins
-    } else if (neutronY === game.gridYsize - 1) {
-        game.finished = true;
-        return kWhitePiece;  // White wins
-    }
-
-    if (!game.neutronHasMoves()) {
-        game.finished = true;
-        return (game.turn === kBlack1) ? kWhitePiece : kBlackPiece;  // Other player wins
-    }
-
-    return null;  // No winner yet
-}
-
-
 function gameOver(winner) {
-    
     const turnIndicator = document.getElementById('turnIndicator');
     let turnText = "";
-    
 
     if (winner === kWhitePiece) {
         turnText = "White Wins!";
@@ -258,9 +387,8 @@ function gameOver(winner) {
         turnIndicator.classList.add('black-turn');
         turnIndicator.classList.remove('white-turn');
     }
-    
-    turnIndicator.innerText = turnText;
 
+    turnIndicator.textContent = turnText;
 }
 
 function highlightValidMoves(game) {
@@ -268,7 +396,7 @@ function highlightValidMoves(game) {
     highlightedCells.forEach(([x, y]) => {
         const cellDiv = document.querySelector(`.cell[data-x='${x}'][data-y='${y}']`);
         if (cellDiv) {
-            cellDiv.classList.add('highlight');  
+            cellDiv.classList.add('highlight');
         }
     });
 }
@@ -289,7 +417,7 @@ function getPieceImage(state) {
 function updateTurnIndicator(game) {
     const turnIndicator = document.getElementById('turnIndicator');
     let turnText = "";
-    
+
     if (game.turn === kWhitePiece) {
         turnText = "White: ";
         turnIndicator.classList.add('white-turn');
@@ -308,7 +436,7 @@ function updateTurnIndicator(game) {
         turnIndicator.classList.remove('neutron-stage');
     }
 
-    turnIndicator.innerText = turnText;
+    turnIndicator.textContent = turnText;
 }
 
 function updateDifficultyIndicator(game) {
@@ -332,12 +460,8 @@ function updateDifficultyIndicator(game) {
 
 function clearHighlights() {
     const highlightedCells = document.querySelectorAll('.highlight');
-    
+
     highlightedCells.forEach(cell => {
         cell.classList.remove('highlight');
     });
 }
-
-
-
-

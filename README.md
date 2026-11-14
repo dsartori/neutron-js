@@ -18,26 +18,59 @@ The full source code for Neutron.js can be found on GitHub:
 
 [https://github.com/dsartori/neutron-js](https://github.com/dsartori/neutron-js)
 
-## Running the Game
+## Running Locally
 
-To run Neutron.js, you can use the Docker container provided in the repository. Below are the steps to get the container running:
+ES modules require a server; opening `index.html` directly from disk will not work. Serve the repository root with any static file server, for example:
+
+```bash
+npx http-server -p 8080 .
+```
+
+Then visit http://localhost:8080 in your browser.
+
+## Running the Game with Docker
 
 1. Clone the repository:
    ```bash
    git clone https://github.com/dsartori/neutron-js.git
+   ```
 2. Navigate into the project directory:
-
-    ```bash
-    cd neutron-js
+   ```bash
+   cd neutron-js
+   ```
 3. Build the Docker image:
-
-    ```bash
-    docker build -t neutron .
+   ```bash
+   docker build -t neutron .
+   ```
 4. Run the Docker container:
-
-    ```bash
-    docker run --rm --name neutron-instance -p 8080:8080 neutron
+   ```bash
+   docker run --rm --name neutron-instance -p 8080:8080 neutron
+   ```
 5. Visit http://localhost:8080 in your browser to play the game.
+
+The image serves only the files listed under Deployment.
+
+## Running Tests
+
+```bash
+cd tests
+npm install
+npm test
+```
+
+Tests cover the game engine, a jsdom smoke test of the UI, and a full AI game played through the click handlers. The suite requires a recent Node.js (18 or later).
+
+## Debug Logging
+
+The game can log AI decisions to the browser console. Enable it with either of these before playing:
+
+- Add `?debug=1` to the URL.
+- Run `localStorage.setItem('neutronDebug', '1')` in the console and reload.
+
+When enabled, each AI move logs its search depth, the candidate count, the size of the tied best-move set, elapsed time, and the top-ranked candidates with their scores. Applied moves log a line each, and the console warns when the side to move can slide the neutron onto an edge row.
+
+The flag travels into the AI worker through the search snapshot, so worker-computed and synchronous searches both log. Disable it with `localStorage.removeItem('neutronDebug')`.
+
 
 ## Deployment
 Deploy the following files and folders to the web server of your choice:
@@ -48,4 +81,5 @@ Deploy the following files and folders to the web server of your choice:
 - neutron.js
 - style.css
 - ui.js
+- ai-worker.js
 

@@ -70,8 +70,7 @@ body {
     padding: 5px;
 }
 
-/* Styl
-
+/* Dashboard styles */
 /* Turn indicator */
 .turn-indicator {
     flex: 1;
@@ -87,14 +86,13 @@ body {
     font-family: 'Arial', sans-serif; 
 }
 .wait-indicator {
-    display: none; /* Initially hidden */
+    display: none; /* Hidden by default; ui.js reveals it via inline style */
     width: 60px;
     height: 100%;
     background-color: transparent; /* Transparent to match dashboard */
     color: #f4f4f4; /* Match button text color */
     border: 1px solid #585858;
     text-align: center;
-    display: flex;
     justify-content: center;
     align-items: center;
     font-size: 2em;
@@ -142,22 +140,6 @@ body {
 }
 
 
-.win-label {
-    font-size: 1.5em;
-    font-weight: bold;
-    margin-top: 10px;
-    text-align: center;
-    display: none;
-    background-color: #4e4949;
-}
-/*
-#winLabel {
-    display: none;
-    font-size: 24px;
-    font-weight: bold;
-    text-align: center;
-    margin-top: 20px;
-}*/
 /* Help Button */
 .help-button {
     width: 60px;
@@ -224,10 +206,13 @@ body {
 
 
 
-.black-wins {
-    color: rgb(171, 169, 169);
+
+
+.turn-indicator.neutron-stage {
+    border-color: #d4af37;
 }
 
-.white-wins {
-    color: rgb(250, 250, 250);
+.cell:focus-visible, .control-button:focus-visible, .help-button:focus-visible, .close-help-button:focus-visible {
+    outline: 2px solid #d4af37;
+    outline-offset: 2px;
 }

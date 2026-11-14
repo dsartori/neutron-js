@@ -3,7 +3,6 @@
     "test": "jest"
   },
   "jest": {
-    "rootDir": "tests",
     "transform": {
       "^.+\\.js$": "babel-jest"
     },

@@ -1,24 +1,16 @@
-FROM node:18-alpine
+FROM node:22-alpine
 
 WORKDIR /usr/src/app
 
-RUN npm install -g http-server
+# Pinned version for reproducible builds.
+RUN npm install -g http-server@14.1.1
 
-RUN npm install webpack webpack-cli copy-webpack-plugin css-loader style-loader html-webpack-plugin terser-webpack-plugin webpack-obfuscator --save-dev
+# Copy only the files the game needs at runtime.
+COPY --chown=node:node index.html style.css ui.js neutron.js constants.js ai-worker.js favicon.ico ./
+COPY --chown=node:node img/ ./img/
 
-COPY . .
+USER node
 
 EXPOSE 8080
 
-
-# Set the command to run Jest with --experimental-vm-modules
-# CMD ["node", "--experimental-vm-modules", "./node_modules/jest/bin/jest.js"]
-
-# Run Webpack build (for production)
-RUN npx webpack --mode production
-
-# Copy the bundled files from the 'dist' directory to a mounted volume
-# so you can access them from your host machine
-VOLUME ["/usr/src/app/dist"]
-
-CMD ["http-server", ".", "-p", "8080"]
+CMD ["http-server", "-p", "8080", "."]

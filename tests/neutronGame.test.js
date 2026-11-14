@@ -74,11 +74,46 @@ test('switchTurn switches turns correctly', () => {
 
 // Test evaluating game state (endgame)
 test('evaluateStateTurn detects endgame correctly', () => {
-  // Move neutron to black home row
+  // Move the neutron to the top row and leave the rest of the board intact.
+  game.grid[2][2].state = kEmpty;
   game.grid[2][0].state = kNeutralPiece;
   const score = game.evaluateStateTurn(kBlackPiece);
   expect(score).toBe(1000);  // Black wins
+  // Evaluation is pure: it must not flag the real game as finished.
+  expect(game.finished).toBe(false);
+});
+
+test('getWinnerStatus finishes the game when the neutron reaches an edge row', () => {
+  game.grid[2][2].state = kEmpty;
+  game.grid[2][0].state = kNeutralPiece;
+  const status = game.getWinnerStatus();
+  expect(status.finished).toBe(true);
+  expect(status.winner).toBe(kBlackPiece);
   expect(game.finished).toBe(true);
+});
+
+test('getWinnerStatus returns no winner on the initial board', () => {
+  const status = game.getWinnerStatus();
+  expect(status.finished).toBe(false);
+  expect(status.winner).toBeNull();
+  expect(game.finished).toBe(false);
+});
+
+test('switchTurn cycles neutron and piece stages across both players', () => {
+  expect(game.turnStage).toBe(kWhite2); // White opens with a piece move
+  game.turnStage = kWhite1;
+  game.switchTurn();
+  expect(game.turnStage).toBe(kWhite2);
+  expect(game.turn).toBe(kWhitePiece);
+  game.switchTurn();
+  expect(game.turnStage).toBe(kBlack1);
+  expect(game.turn).toBe(kBlackPiece);
+  game.switchTurn();
+  expect(game.turnStage).toBe(kBlack2);
+  expect(game.turn).toBe(kBlackPiece);
+  game.switchTurn(); // back to White, neutron stage
+  expect(game.turnStage).toBe(kWhite1);
+  expect(game.turn).toBe(kWhitePiece);
 });
 
 // Test getMovesForGrid method
@@ -112,6 +147,7 @@ test('getMovesForGrid returns valid moves for current state and turn', () => {
     
             // Place the neutron in the center
             game.grid[2][2].state = kNeutralPiece;
+            game.random = () => 0;  // deterministic tie-breaking
         });
     
         test('should give a score of 1000 if Black wins (neutron reaches the first row)', () => {
@@ -130,7 +166,7 @@ test('getMovesForGrid returns valid moves for current state and turn', () => {
         // Set up a winning board state for Black
         game.grid[2][0].state = kEmpty;
         game.grid[1][1].state = kBlackPiece;
-        game.turn = kBlack1;  // Black's turn with the neutron
+        game.turn = kBlackPiece;  // Black's turn
 
         const bestMove = game.getBestMoveForState(game, kBlackPiece);
         const [neutronMove, pieceMove] = bestMove;
@@ -144,7 +180,7 @@ test('getMovesForGrid returns valid moves for current state and turn', () => {
         game.grid[2][0].state = kBlackPiece;
         game.grid[3][4].state = kWhitePiece;
 
-        game.turn = kBlack1;
+        game.turn = kBlackPiece;
 
         const bestMove = game.getBestMoveForState(game, kBlackPiece);
         const [neutronMove, pieceMove] = bestMove;
@@ -157,46 +193,20 @@ test('should generate and reverse valid moves for White pieces', () => {
     const initialState = JSON.stringify(game.grid); // Store the initial state
     const moves = game.getMovesForGrid(game, kWhitePiece);
 
-    // Print moves generated for verification
-    console.log("Generated moves for White pieces:");
-    game.printBoardState(moves);  
-
-    let mvTest;
-    
     // Apply the first generated move (neutron move + piece move)
     const [neutronMove, pieceMove] = moves[0];
 
-    // Print the board before applying the move
-    console.log("Board before applying the move:");
-    game.printBoardState(game.grid);
-
     // Make the move
-    mvTest = game.movePiece(neutronMove[0][0], neutronMove[0][1], neutronMove[1][0], neutronMove[1][1]);
+    let mvTest = game.movePiece(neutronMove[0][0], neutronMove[0][1], neutronMove[1][0], neutronMove[1][1]);
     expect(mvTest).toBe(true);
-
-    game.printBoardState(game.grid);
     mvTest = game.movePiece(pieceMove[0][0], pieceMove[0][1], pieceMove[1][0], pieceMove[1][1]);
     expect(mvTest).toBe(true);
 
-    game.printBoardState(game.grid);
-    // Print the board after applying the move
-    console.log("Board after applying the move:");
-    game.printBoardState(game.grid);
-
     // Reverse the moves
-    
-    mvTest = game.movePiece(pieceMove[1][0], pieceMove[1][1], pieceMove[0][0], pieceMove[0][1],true);
+    mvTest = game.movePiece(pieceMove[1][0], pieceMove[1][1], pieceMove[0][0], pieceMove[0][1], true);
     expect(mvTest).toBe(true);
-    
-    game.printBoardState(game.grid);
-    mvTest = game.movePiece(neutronMove[1][0], neutronMove[1][1], neutronMove[0][0], neutronMove[0][1],true);
+    mvTest = game.movePiece(neutronMove[1][0], neutronMove[1][1], neutronMove[0][0], neutronMove[0][1], true);
     expect(mvTest).toBe(true);
-    game.printBoardState(game.grid);
-
-
-    // Print the board after reversing the move
-    console.log("Board after reversing the move:");
-    game.printBoardState(game.grid);
 
     // Ensure game state is restored to the initial state
     expect(JSON.stringify(game.grid)).toEqual(initialState);
