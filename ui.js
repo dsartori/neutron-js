@@ -164,6 +164,12 @@ async function applyBestMove(game, bestMove, revision, before) {
         game.aiThinking = false;
         return;
     }
+    // A winning neutron slide ends the game. No piece phase follows.
+    if (finishIfGameOver(game)) {
+        game.aiThinking = false;
+        setWaitVisible(false);
+        return;
+    }
     // Short pause so the neutron animation reads before the piece animation.
     await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -345,6 +351,7 @@ function handleCellClick(x, y, game) {
                 document.getElementById('difficultyButton').disabled = true;
             }
 
+            // A winning neutron slide ends the game. No piece phase follows.
             if (finishIfGameOver(game)) {
                 return;
             }
