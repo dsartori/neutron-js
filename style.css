@@ -22,6 +22,18 @@ body {
     padding-bottom: 100%; /* Keeps cell aspect ratio square */
     border: 1px solid white;
     position: relative;
+    cursor: pointer; /* Cells are the primary control */
+}
+
+/* The piece the player holds. The piece images are RGBA, so the tint shows in
+   the corners around every piece. Same grey family as .control-button. */
+.cell.selected {
+    background-color: rgba(204, 204, 204, 0.25);
+}
+
+/* Clicks are ignored while the AI moves or the game has ended. */
+.grid.board-locked .cell {
+    cursor: default;
 }
 
 .piece {
@@ -86,7 +98,8 @@ body {
     font-family: 'Arial', sans-serif; 
 }
 .wait-indicator {
-    display: none; /* Hidden by default; ui.js reveals it via inline style */
+    display: flex;
+    visibility: hidden; /* Slot stays reserved so the dashboard never reflows */
     width: 60px;
     height: 100%;
     background-color: transparent; /* Transparent to match dashboard */
@@ -104,6 +117,11 @@ body {
     width: 100%;
     height: 100%;
     object-fit: contain;
+}
+
+/* ui.js toggles this class on #wait-label while the AI searches. */
+.wait-indicator.wait-active {
+    visibility: visible;
 }
 
 /* Style for control buttons */
@@ -210,6 +228,17 @@ body {
 
 .turn-indicator.neutron-stage {
     border-color: #d4af37;
+}
+
+/* Touch browsers paint a translucent flash on any element with a click handler. */
+.cell, .control-button, .help-button, .close-help-button {
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Cells are div[tabindex], so browsers also draw their default focus ring on a
+   mouse click. The gold :focus-visible rule below still marks keyboard focus. */
+.cell:focus:not(:focus-visible) {
+    outline: none;
 }
 
 .cell:focus-visible, .control-button:focus-visible, .help-button:focus-visible, .close-help-button:focus-visible {
