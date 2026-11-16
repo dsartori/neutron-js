@@ -75,9 +75,10 @@ body {
     justify-content: space-between;
     align-items: center;
     width: 100%; /* Full width, to match grid */
+    box-sizing: border-box; /* Keeps the 5px padding inside the viewport */
     margin-top: 20px;
     max-width: 750px; /* Match grid's max width */
-    height: 50px; /* Fixed height for the dashboard */
+    height: 60px; /* 50px row plus the 5px padding, now inside the border box */
     background-color: transparent; /* Transparent background */
     padding: 5px;
 }
@@ -244,4 +245,50 @@ body {
 .cell:focus-visible, .control-button:focus-visible, .help-button:focus-visible, .close-help-button:focus-visible {
     outline: 2px solid #d4af37;
     outline-offset: 2px;
+}
+
+/* A phone cannot hold the status line, three buttons and two icon slots in one
+   50px row: the status text wrapped out of its box. Status and icon slots take a
+   first row, and the three buttons split a second row into even thirds. */
+@media (max-width: 600px) {
+    .dashboard {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        grid-auto-rows: minmax(44px, auto);
+        align-items: stretch;
+        gap: 6px;
+        height: auto;
+    }
+
+    .turn-indicator {
+        grid-row: 1;
+        grid-column: 1 / span 4;
+        height: auto;
+        font-size: 0.9em;
+    }
+
+    .help-button {
+        grid-row: 1;
+        grid-column: 5;
+        width: auto;
+        height: 44px; /* Pinned: the slot holds no text and must not size the row */
+    }
+
+    .wait-indicator {
+        grid-row: 1;
+        grid-column: 6;
+        width: auto;
+        height: 44px; /* Pinned, or the spinner SVG scales to the column width */
+    }
+
+    .control-button {
+        grid-row: 2;
+        height: auto;
+        padding: 8px 4px;
+        font-size: 0.75em;
+    }
+
+    #resetButton { grid-column: 1 / span 2; }
+    #toggleModeButton { grid-column: 3 / span 2; }
+    #difficultyButton { grid-column: 5 / span 2; }
 }
